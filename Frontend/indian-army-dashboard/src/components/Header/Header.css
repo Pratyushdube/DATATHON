@@ -1,0 +1,45 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: #3d403a;
+  color: #f5f5f5;
+}
+
+.header__left {
+  display: flex;
+  align-items: center;
+}
+
+.header__logo {
+  height: 40px;
+  margin-right: 1rem;
+}
+
+.header__title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.header__right {
+  display: flex;
+  align-items: center;
+}
+
+.header__user {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.header__avatar {
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+}
+
+.header__username {
+  font-weight: 600;
+}
