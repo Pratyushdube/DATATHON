@@ -5,7 +5,11 @@ import tensorflow as tf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pennylane as qml
+import random
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timezone
+import uuid
+
 
 # --- 1. DEFINE Pydantic MODELS and Quantum Kernel ---
 
@@ -89,25 +93,42 @@ def load_assets():
     """On startup, load and preprocess all necessary assets into a cache."""
     print("Loading all model assets...")
     try:
+        # --- Existing Hybrid Model Assets ---
         pipeline = joblib.load("preprocessor_pipelinefinal.joblib")
         x_train_raw = joblib.load("x_train_rawfinal.joblib")
 
         model_cache["pipeline"] = pipeline
         model_cache["autoencoder"] = tf.keras.models.load_model("autoencoder_modelfinal.keras")
         model_cache["qsvm"] = joblib.load("qsvm_modelfinal.joblib")
-        model_cache["anomaly_threshold"] = 0.25 # Use the same threshold from training
+        model_cache["anomaly_threshold"] = 0.25
 
-        # ✅ PERFORMANCE OPTIMIZATION:
-        # Pre-process the raw training data for the QSVM ONCE at startup.
-        # This avoids re-calculating it on every single API call.
         print("Preprocessing training data for QSVM cache...")
         model_cache["x_train_processed"] = pipeline.transform(x_train_raw)
+        
+        # --- Existing Anomaly Detector Assets ---
+        model_cache["iot_scaler"] = joblib.load("scaler.joblib")
+        model_cache["iot_autoencoder"] = tf.keras.models.load_model("autoencoder_model.keras")
+        model_cache["iot_anomaly_threshold"] = 0.0762
+
+        # --- NEW: Load sample data for automated analysis ---
+        print("Loading sample data for automation...")
+        model_cache["sample_traffic_df"] = pd.read_csv("sample_traffic_logs.csv")
+        model_cache["sample_iot_df"] = pd.read_csv("sample_iot_data.csv")
+        
         print("Assets loaded and processed successfully. ✅")
 
     except Exception as e:
         print(f"🔴 FATAL: Failed to load model assets. Error: {e}")
-        # Clear cache on failure
         model_cache.clear()
+
+
+
+# --- 3. HELPER FUNCTION TO GET CURRENT TIME ---
+def get_utc_timestamp():
+    """Returns the current time in UTC as a timezone-aware ISO 8601 string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 
 # --- 3. DEFINE THE UNIFIED PREDICTION ENDPOINT ---
 @app.post("/predict/hybrid-analysis", response_model=HybridPredictionResponse, tags=["Hybrid Analysis"])
@@ -146,9 +167,11 @@ async def predict_hybrid(log: TrafficLog):
         verdict = "Known Threat Pattern Detected (Low-and-Slow Activity)"
 
     return {
+        "id": f"HYB-{uuid.uuid4().hex[:6].upper()}",
         "verdict": verdict,
         "is_anomalous": bool(is_anomalous),
         "anomaly_score": float(error),
+        "time": datetime.now().isoformat(),
         "is_known_threat": bool(is_known_threat)
     }
 
@@ -229,7 +252,7 @@ def read_root():
 @app.post("/predictanomaly", response_model=PredictionResponse)
 def predict_anomaly(data: IoTData):
     """
-    Receives IoT data, preprocesses it, and predicts if it's an anomaly.
+    Receives IoT data, preprocesses it, and vpredicts if it's an anomaly.
     """
     # Convert input data to a NumPy array
     input_data = np.array(list(data.dict().values())).reshape(1, -1)
@@ -249,8 +272,100 @@ def predict_anomaly(data: IoTData):
 
     # Return the structured result
     return {
+        "id": f"{uuid.uuid4().hex[:6].upper()}",
+        "system": "iot-sensor-gaad",        
         "is_anomaly": bool(is_anomaly),
         "label": label,
         "reconstruction_error": float(reconstruction_error),
         "threshold": ANOMALY_THRESHOLD
     }
+
+
+
+# --- 4. NEW AUTOMATED ANALYSIS ENDPOINTS ---
+
+@app.get("/analyze/hybrid-stream", tags=["Automated Analysis"])
+async def analyze_hybrid_stream():
+    """
+    Simulates reading a new traffic log, analyzes it, and returns a formatted alert if it's a threat.
+    """
+    if not model_cache or "sample_traffic_df" not in model_cache:
+        raise HTTPException(status_code=503, detail="Model assets not loaded.")
+
+    # STEP 1: Simulate receiving new data by sampling from the loaded CSV
+    sample_log_df = model_cache["sample_traffic_df"].sample(n=1)
+    log_data = sample_log_df.to_dict(orient='records')[0]
+    
+    # Use the TrafficLog model for validation and structure
+    log = TrafficLog(**log_data)
+    
+    # --- This is the same logic as your manual prediction endpoint ---
+    input_df = pd.DataFrame([log.dict()])
+    processed_features = model_cache["pipeline"].transform(input_df)
+    
+    autoencoder = model_cache["autoencoder"]
+    reconstructed = autoencoder.predict(processed_features)
+    error = np.mean(np.abs(processed_features - reconstructed))
+    is_anomalous = error > model_cache["anomaly_threshold"]
+
+    qsvm = model_cache["qsvm"]
+    x_train_processed = model_cache["x_train_processed"]
+    kernel_row = np.array([[quantum_kernel(processed_features[0], xtp) for xtp in x_train_processed]])
+    is_known_threat = qsvm.predict(kernel_row)[0] == 1
+
+    verdict = "Normal Traffic"
+    if is_anomalous and is_known_threat:
+        verdict = "Confirmed Known Threat"
+    elif is_anomalous and not is_known_threat:
+        verdict = "Unknown Anomaly (Zero-Day)"
+    elif not is_anomalous and is_known_threat:
+        verdict = "Low-and-Slow Activity"
+
+    # STEP 2: If it's not normal, format it as a high-priority alert
+    if verdict != "Normal Traffic":
+        severity_map = {
+            "Confirmed Known Threat": "Critical",
+            "Unknown Anomaly (Zero-Day)": "High",
+            "Low-and-Slow Activity": "Medium"
+        }
+        return [{
+            "id": f"{uuid.uuid4().hex[:6].upper()}",
+            "system": f"{log.proto}:{log.service}",
+            "severity": severity_map.get(verdict),
+            "time": get_utc_timestamp(),
+            "status": "Logged"
+        }]
+    
+    # Return an empty list if traffic is normal
+    return []
+
+
+@app.get("/analyze/anomaly-stream", tags=["Automated Analysis"])
+async def analyze_anomaly_stream():
+    """
+    Simulates reading new IoT sensor data, analyzes it, and returns a formatted alert if it's an anomaly.
+    """
+    if not model_cache or "sample_iot_df" not in model_cache:
+        raise HTTPException(status_code=503, detail="Model assets not loaded.")
+
+    # STEP 1: Simulate receiving new data by sampling
+    sample_iot_df = model_cache["sample_iot_df"].sample(n=1)
+    
+    # --- Same logic as your manual prediction endpoint ---
+    input_data_scaled = model_cache["iot_scaler"].transform(sample_iot_df)
+    reconstruction = model_cache["iot_autoencoder"].predict(input_data_scaled)
+    reconstruction_error = tf.keras.losses.mae(input_data_scaled, reconstruction).numpy()[0]
+    
+    is_anomaly = reconstruction_error > model_cache["iot_anomaly_threshold"]
+
+    # STEP 2: If it's an anomaly, create an alert
+    if is_anomaly:
+        return [{
+            "id": f"{uuid.uuid4().hex[:6].upper()}",
+            "system": "iot-sensor-grid", # Example system name
+            "severity": random.choice(["Low", "Medium", "High", "Critical"]),
+            "time": get_utc_timestamp(),
+            "status": "Logged"
+        }]
+
+    return []
