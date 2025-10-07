@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+
+const initialStats = [
+  { id: 1, title: 'Total Threats', value: '1,234', change: '+12.5%', changeType: 'increase', icon: 'ShieldAlert' },
+  { id: 2, title: 'High-Risk Alerts', value: '56', change: '-2.8%', changeType: 'decrease', icon: 'Siren' },
+  { id: 3, title: 'Systems Affected', value: '789', change: '+5.2%', changeType: 'increase', icon: 'Laptop' },
+  { id: 4, title: 'Incidents Resolved', value: '1,123', change: '+15.0%', changeType: 'decrease', icon: 'CheckCircle' },
+];
+
+const recentAlerts = [
+  { id: 'ALERT-001', system: 'auth-service-prod', severity: 'Critical', time: '2 min ago', status: 'Unresolved' },
+  { id: 'ALERT-002', system: 'payment-gateway-v2', severity: 'High', time: '15 min ago', status: 'Unresolved' },
+  { id: 'ALERT-003', system: 'user-database-replica', severity: 'Medium', time: '1 hr ago', status: 'Resolved' },
+  { id: 'ALERT-004', system: 'cdn-edge-node-eu', severity: 'High', time: '3 hr ago', status: 'Unresolved' },
+  { id: 'ALERT-005', system: 'api-main-cluster', severity: 'Low', time: '5 hr ago', status: 'Resolved' },
+];
+
+
 // --- MOCKED DATA FOR CHARTS ---
 // This data remains for demonstration as the API doesn't have chart endpoints.
 const threatData = [
@@ -58,35 +75,96 @@ const StatCard = ({ title, value, change, changeType, icon }) => {
 };
 
 const ThreatsOverTimeChart = () => (
-    <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
-        <h3 className="text-lg font-bold text-white mb-4">Threats Over Time</h3>
-        <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={threatData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
-                <XAxis dataKey="name" stroke="#a0aec0" />
-                <YAxis stroke="#a0aec0" />
-                <Tooltip contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }} labelStyle={{ color: '#e2e8f0' }} />
-                <Legend wrapperStyle={{ color: '#e2e8f0' }} />
-                <Line type="monotone" dataKey="threats" stroke="#82ca9d" strokeWidth={2} activeDot={{ r: 8 }} />
-            </LineChart>
-        </ResponsiveContainer>
-    </div>
+  <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
+    <h3 className="text-lg font-bold text-white mb-4">Threats Over Time</h3>
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={threatData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+        <XAxis dataKey="name" stroke="#a0aec0" />
+        <YAxis stroke="#a0aec0" />
+        <Tooltip
+          contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }}
+          labelStyle={{ color: '#e2e8f0' }}
+        />
+        <Legend wrapperStyle={{ color: '#e2e8f0' }} />
+        <Line type="monotone" dataKey="threats" stroke="#82ca9d" strokeWidth={2} activeDot={{ r: 8 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
 );
 
 const ThreatBreakdownChart = () => (
-    <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
-        <h3 className="text-lg font-bold text-white mb-4">Threat Breakdown</h3>
-        <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-                <Pie data={threatTypes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                    {threatTypes.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#202837ff' , border: '1px solid #4a5568' }} />
-                <Legend wrapperStyle={{ color: '#f3f4f6', paddingTop: '20px' }} />
-            </PieChart>
-        </ResponsiveContainer>
-    </div>
+  <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
+    <h3 className="text-lg font-bold text-white mb-4">Threat Breakdown</h3>
+    <ResponsiveContainer width="100%" height={300}>
+      <PieChart>
+        <Pie data={threatTypes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+          {threatTypes.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.fill} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }} />
+        <Legend wrapperStyle={{ color: '#e2e8f0', paddingTop: '20px' }} />
+      </PieChart>
+    </ResponsiveContainer>
+  </div>
 );
+
+
+const RecentAlerts = () => {
+  const getSeverityClass = (severity) => {
+    switch (severity) {
+      case 'Critical': return 'bg-red-500/20 text-red-400 border-red-500';
+      case 'High': return 'bg-orange-500/20 text-orange-400 border-orange-500';
+      case 'Medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500';
+      case 'Low': return 'bg-blue-500/20 text-blue-400 border-blue-500';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500';
+    }
+  };
+
+  const getStatusClass = (status) => {
+    return status === 'Resolved' ? 'bg-green-500/20 text-green-400' : 'bg-gray-600/20 text-gray-300';
+  };
+
+  return (
+    <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700 col-span-1 lg:col-span-2">
+      <h3 className="text-lg font-bold text-white mb-4">Recent High-Priority Alerts</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead className="border-b border-gray-700">
+            <tr>
+              <th className="p-3 text-sm font-semibold text-gray-400">Alert ID</th>
+              <th className="p-3 text-sm font-semibold text-gray-400">System</th>
+              <th className="p-3 text-sm font-semibold text-gray-400">Severity</th>
+              <th className="p-3 text-sm font-semibold text-gray-400">Timestamp</th>
+              <th className="p-3 text-sm font-semibold text-gray-400">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentAlerts.map(alert => (
+              <tr key={alert.id} className="border-b border-gray-700/50 hover:bg-gray-700/50 transition-colors">
+                <td className="p-3 text-sm text-gray-300 font-mono">{alert.id}</td>
+                <td className="p-3 text-sm text-gray-300">{alert.system}</td>
+                <td className="p-3">
+                  <span className={`px-2 py-1 text-xs font-bold rounded-full border ${getSeverityClass(alert.severity)}`}>
+                    {alert.severity}
+                  </span>
+                </td>
+                <td className="p-3 text-sm text-gray-400">{alert.time}</td>
+                <td className="p-3">
+                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(alert.status)}`}>
+                    {alert.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 
 // --- FEATURE 1: Live Hybrid Analysis Tool ---
 const HybridAnalysisTool = () => {
@@ -380,6 +458,9 @@ const Dashboard = () => {
                     <div>
                         <ThreatBreakdownChart />
                     </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+                  <RecentAlerts />
                 </div>
             </main>
         </div>
