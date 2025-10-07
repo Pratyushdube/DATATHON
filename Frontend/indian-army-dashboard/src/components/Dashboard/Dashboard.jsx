@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 
 const initialStats = [
@@ -93,81 +93,107 @@ const ThreatsOverTimeChart = () => (
   </div>
 );
 
-const ThreatBreakdownChart = () => (
-  <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
-    <h3 className="text-lg font-bold text-white mb-4">Threat Breakdown</h3>
-    <ResponsiveContainer width="100%" height={300}>
-      <PieChart>
-        <Pie data={threatTypes} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-          {threatTypes.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.fill} />
-          ))}
-        </Pie>
-        <Tooltip contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }} />
-        <Legend wrapperStyle={{ color: '#e2e8f0', paddingTop: '20px' }} />
-      </PieChart>
-    </ResponsiveContainer>
-  </div>
-);
+// --- MODIFIED: ThreatBreakdownChart Component ---
+// It will now accept data as a prop and use a predefined color list.
+const ThreatBreakdownChart = ({ data }) => {
+    // A set of colors for the pie chart slices
+    const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#00C49F', '#FFBB28', '#FF8042', '#0088FE'];
+
+    // If there's no data, show a placeholder message
+    if (!data || data.length === 0) {
+        return (
+            <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700 flex items-center justify-center h-full">
+                <p className="text-gray-500">Waiting for alert data...</p>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
+            <h3 className="text-lg font-bold text-white mb-4">Threats by System</h3>
+            <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                    <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }} />
+                    <Legend wrapperStyle={{ color: '#e2e8f0', paddingTop: '20px' }} />
+                </PieChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
+// --- NEW: Reconstruction Error Chart Component ---
+const ReconstructionErrorChart = ({ data }) => {
+  // Find the threshold from the last data point, or use a default
+  const threshold = data.length > 0 ? data[data.length - 1].threshold : 0.0762;
+  const ANOMALY_COLOR = '#ef4444'; // Red for anomalies
+  const NORMAL_COLOR = '#82ca9d'; // Green for normal
+
+  // A custom dot renderer for the line chart
+  const CustomizedDot = (props) => {
+    const { cx, cy, payload } = props;
+    if (payload.is_anomaly) {
+      return <circle cx={cx} cy={cy} r={5} stroke={ANOMALY_COLOR} strokeWidth={2} fill="#fff" />;
+    }
+    return null; // Don't render a dot for normal points
+  };
+
+  return (
+    <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700">
+      <h3 className="text-lg font-bold text-white mb-4">Live Anomaly Detection (Reconstruction Error)</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+          <XAxis dataKey="time" stroke="#a0aec0" tick={{ fontSize: 12 }} />
+          <YAxis stroke="#a0aec0" domain={[0, 'dataMax + 0.02']} tick={{ fontSize: 12 }} />
+          <Tooltip
+            contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568' }}
+            labelStyle={{ color: '#e2e8f0' }}
+          />
+          <Legend wrapperStyle={{ color: '#e2e8f0' }} />
+          
+          {/* The threshold line */}
+          <ReferenceLine y={threshold} label={{ value: 'Threshold', position: 'insideTopRight', fill: '#f59e0b' }} stroke="#f59e0b" strokeDasharray="4 4" />
+
+          {/* The error line */}
+          <Line type="monotone" dataKey="error" name="Reconstruction Error" stroke={NORMAL_COLOR} strokeWidth={2} dot={<CustomizedDot />} activeDot={{ r: 8 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
 
 
-// MODIFIED: RecentAlerts component now accepts alerts as a prop
+
 const RecentAlerts = ({ alerts }) => {
 
-    // NEW: Helper function to format the time
-    const formatTime = (isoString) => {
-      // Handle cases where the time might be missing
-        // 1. Handle obviously invalid inputs like null or undefined first.
-    if (!isoString) {
-        console.warn("formatTime received a null or undefined time value.");
-        return 'Invalid Time';
+  const formatTime = (isoString) => {
+    if (!isoString) return 'Invalid Time';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Invalid Time';
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  };
+
+  const getSeverityClass = (severity) => {
+    switch (severity) {
+      case 'Critical': return 'bg-red-500/20 text-red-400 border-red-500';
+      case 'High': return 'bg-orange-500/20 text-orange-400 border-orange-500';
+      case 'Medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500';
+      case 'Low': return 'bg-blue-500/20 text-blue-400 border-blue-500';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500';
     }
-        
-        // 2. Create a new Date object from THAT alert's time string.
-        const date = new Date(isoString);
-
-         if (isNaN(date.getTime())) {
-        // Log the problematic string to help you debug what the API is sending.
-        console.error(`Failed to parse date from string: "${isoString}"`);
-        return 'Invalid Time';
-    }
-
-        // 3. Apply your manual formatting to this specific date.
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        console.log(`${hours}:${minutes}:${seconds}`);
-        return `${hours}:${minutes}:${seconds}`;
-    };
-
-    console.log('Props received by RecentAlerts component:', alerts); 
-    const getSeverityClass = (severity) => {
-      
-        switch (severity) {
-            case 'Critical': return 'bg-red-500/20 text-red-400 border-red-500';
-            case 'High': return 'bg-orange-500/20 text-orange-400 border-orange-500';
-            case 'Medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500';
-            case 'Low': return 'bg-blue-500/20 text-blue-400 border-blue-500';
-            default: return 'bg-gray-500/20 text-gray-400 border-gray-500';
-        }
-    };
+  };
 
   const getStatusClass = (status) => {
     return status === 'Resolved' ? 'bg-green-500/20 text-green-400' : 'bg-gray-600/20 text-gray-300';
   };
-  const now = new Date();
-
-// Get a simple, localized time string (e.g., "10:27:43 AM")
-  // console.log(now.toLocaleTimeString()); 
-
-// Get specific parts
-//   const hours = now.getHours();       // 10 (24-hour format)
-//   const minutes = now.getMinutes();   // 27
-//   const seconds = now.getSeconds();   // 43
-
-// // Manually format it as HH:MM:SS
-//   const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-//   console.log(formattedTime); // Output: "10:27:43"
 
   return (
     <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-lg border border-gray-700 col-span-1 lg:col-span-2">
@@ -186,22 +212,32 @@ const RecentAlerts = ({ alerts }) => {
           <tbody>
             {alerts.map(alert => (
               <tr key={alert.id} className="border-b border-gray-700/50 hover:bg-gray-700/50 transition-colors">
+                
+                {/* Column 1: Alert ID */}
                 <td className="p-3 text-sm text-gray-300 font-mono">{alert.id}</td>
+                
+                {/* Column 2: System */}
                 <td className="p-3 text-sm text-gray-300">{alert.system}</td>
+                
+                {/* Column 3: Severity */}
                 <td className="p-3">
                   <span className={`px-2 py-1 text-xs font-bold rounded-full border ${getSeverityClass(alert.severity)}`}>
                     {alert.severity}
                   </span>
                 </td>
+
+                {/* Column 4: Timestamp */}
                 <td className="p-3 text-sm text-gray-400 font-mono">
-                                    {/* 5. Call the new function here, passing in the alert's own time */}
-                                    {formatTime(alert.time)}
-                                </td>
+                  {formatTime(alert.time)}
+                </td>
+
+                {/* Column 5: Status */}
                 <td className="p-3">
                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(alert.status)}`}>
                     {alert.status}
                   </span>
                 </td>
+
               </tr>
             ))}
           </tbody>
@@ -210,7 +246,6 @@ const RecentAlerts = ({ alerts }) => {
     </div>
   );
 };
-
 
 // // --- FEATURE 1: Live Hybrid Analysis Tool ---
 // const HybridAnalysisTool = () => {
@@ -481,6 +516,12 @@ const Dashboard = () => {
     // NEW: State for the live alerts table
     const [recentAlerts, setRecentAlerts] = useState([]);
 
+    // NEW: State for the error chart data
+    const [errorChartData, setErrorChartData] = useState([]);
+
+    // NEW: State for the pie chart data
+    const [pieChartData, setPieChartData] = useState([]);
+
     // NEW: useEffect hook to fetch data periodically
     useEffect(() => {
         const fetchNewAlerts = async () => {
@@ -498,50 +539,71 @@ const Dashboard = () => {
                 }
 
                 const newHybridAlerts = await hybridRes.json();
-                const newAnomalyAlerts = await anomalyRes.json();
+                const anomalyResponse = await anomalyRes.json(); // This now contains chart_point and alert
+
+                const { chart_point, alert: newAnomalyAlerts } = anomalyResponse;
 
                 console.log("Fetched new hybrid alerts:", newHybridAlerts);
                 console.log("Fetched new anomaly alerts:", newAnomalyAlerts);
                 
-                const allNewAlerts = [...newHybridAlerts, ...newAnomalyAlerts];
+                // const allNewAlerts = [...newHybridAlerts, ...newAnomalyAlerts];
                 
-                // If we received any new alerts, add them to the top of the list
-                if (allNewAlerts.length > 0) {
-                    // This logic prevents adding duplicate alerts
-                    setRecentAlerts(prevAlerts => {
-                        // 1. Create a Set of existing alert IDs for quick lookup.
-                        const existingIds = new Set(prevAlerts.map(alert => alert.id));
+                
 
-                        // 2. Filter the newly fetched alerts, keeping only the ones we haven't seen.
-                        const uniqueNewAlerts = allNewAlerts.filter(alert => !existingIds.has(alert.id));
 
-                        // 3. If there are no truly new alerts, do nothing.
-                        if (uniqueNewAlerts.length === 0) {
-                            return prevAlerts;
-                        }
+                // --- UPDATE CHART DATA ---
+                if (chart_point) {
+                  // Format the timestamp for display on the X-axis
+                  const formatted_chart_point = {
+                    ...chart_point,
+                    time: new Date(chart_point.timestamp).toLocaleTimeString(),
+                  };
 
-                        // 4. Prepend only the unique new alerts and then trim the list.
-                        const updatedAlerts = [...uniqueNewAlerts, ...prevAlerts];
-                        return updatedAlerts.slice(0, 15);
-                    });
+                  setErrorChartData(prevData => {
+                    const updatedData = [...prevData, formatted_chart_point];
+                    // Keep the chart to a manageable size (e.g., last 50 points)
+                    return updatedData.slice(-50);
+                  });
                 }
+                
+                            // --- UPDATE ALERTS TABLE (Simplified) ---
+                    const allNewAlerts = [...newHybridAlerts, ...newAnomalyAlerts];
+                    if (allNewAlerts.length > 0) {
+                      setRecentAlerts(prevAlerts => 
+                        [...allNewAlerts, ...prevAlerts].slice(0, 15)
+                      );
+                    }
+                  } catch (error) {
+                    console.error("Failed to connect to the analysis API:", error);
+                  }
+                };
 
-            } catch (error) {
-                console.error("Failed to connect to the analysis API:", error);
-            }
-        };
+                fetchNewAlerts();
+                const intervalId = setInterval(fetchNewAlerts, 10000);
+                return () => clearInterval(intervalId);
+                }, []);
+    
+    // --- NEW (EFFECT 2): For Processing Pie Chart Data ---
+  // This effect will run automatically whenever `recentAlerts` changes.
+  useEffect(() => {
+    if (recentAlerts.length === 0) return; // Do nothing if there are no alerts
 
-        // Fetch immediately on component mount
-        fetchNewAlerts(); 
+    // 1. Count occurrences of each system.
+    const systemCounts = recentAlerts.reduce((acc, alert) => {
+      acc[alert.system] = (acc[alert.system] || 0) + 1;
+      return acc;
+    }, {});
 
-        // Then, set up an interval to fetch every 10 seconds
-        const intervalId = setInterval(fetchNewAlerts, 10000);
+    // 2. Convert to the format Recharts needs.
+    const pieData = Object.keys(systemCounts).map(systemName => ({
+      name: systemName,
+      value: systemCounts[systemName],
+    }));
 
-        // Cleanup function to clear the interval when the component unmounts
-        return () => clearInterval(intervalId);
-
-    }, []); // Empty dependency array ensures this runs only once on mount
-
+    // 3. Update the pie chart's state.
+    setPieChartData(pieData);
+    
+  }, [recentAlerts]); // This is the key: the dependency array.
 
 
     return (
@@ -564,8 +626,13 @@ const Dashboard = () => {
                         <ThreatsOverTimeChart />
                     </div>
                     <div>
-                        <ThreatBreakdownChart />
+                        <ThreatBreakdownChart data={pieChartData}/>
                     </div>
+                </div>
+
+                {/* NEW: Add the error chart to the layout */}
+                <div className="mb-8">
+                  <ReconstructionErrorChart data={errorChartData} />
                 </div>
 
                 {/* MODIFIED: The alerts table now displays live, automated data */}

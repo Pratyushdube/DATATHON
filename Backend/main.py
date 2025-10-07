@@ -355,17 +355,40 @@ async def analyze_anomaly_stream():
     input_data_scaled = model_cache["iot_scaler"].transform(sample_iot_df)
     reconstruction = model_cache["iot_autoencoder"].predict(input_data_scaled)
     reconstruction_error = tf.keras.losses.mae(input_data_scaled, reconstruction).numpy()[0]
-    
     is_anomaly = reconstruction_error > model_cache["iot_anomaly_threshold"]
+# --- MODIFIED RESPONSE ---
+    # We will now always return an object.
+    # It will contain the data point for the chart.
+    # It will ALSO contain an alert, but only if one was detected.
 
-    # STEP 2: If it's an anomaly, create an alert
+    system_names = [
+    "drone-iot-surveillance",
+    "field-sensor-grid",
+    "base-camera-network",
+    "vehicle-iot-tracker",
+    "acoustic-sensor-array",
+    "perimeter-monitoring-system",
+    "recon-data-feed",
+    "iot-sensor-grid"
+]
+
+    alert_data = []
     if is_anomaly:
-        return [{
-            "id": f"{uuid.uuid4().hex[:6].upper()}",
-            "system": "iot-sensor-grid", # Example system name
-            "severity": random.choice(["Low", "Medium", "High", "Critical"]),
+        random_severity = random.choice(["Low", "Medium", "High"])
+        alert_data = [{
+            "id": f"IOT-{uuid.uuid4().hex[:6].upper()}",
+            "system": random.choice(system_names),
+            "severity": random_severity,
             "time": get_utc_timestamp(),
-            "status": "Logged"
+            "status": "Is Anomaly"
         }]
 
-    return []
+    return {
+        "chart_point": {
+            "error": float(reconstruction_error),
+            "timestamp": get_utc_timestamp(),
+            "is_anomaly": bool(is_anomaly),
+            "threshold": model_cache["iot_anomaly_threshold"]
+        },
+        "alert": alert_data
+    }
