@@ -440,15 +440,7 @@ const Dashboard = () => {
                     ))}
                 </div>
 
-                {/* Live Hybrid Analysis Tool */}
-                <div className="mb-8">
-                    <HybridAnalysisTool />
-                </div>
-
-                {/* Live Anomaly Detector Component */}
-                <div className="mb-8">
-                    <LiveAnomalyDetector />
-                </div>
+                
 
                 {/* Charts Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
@@ -461,6 +453,16 @@ const Dashboard = () => {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
                   <RecentAlerts />
+                </div>
+
+                {/* Live Hybrid Analysis Tool */}
+                <div className="mb-8">
+                    <HybridAnalysisTool />
+                </div>
+
+                {/* Live Anomaly Detector Component */}
+                <div className="mb-8">
+                    <LiveAnomalyDetector />
                 </div>
             </main>
         </div>
